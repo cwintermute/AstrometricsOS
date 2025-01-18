@@ -1,2 +1,2 @@
 # astrometrics
-Astrometrics is a Linux OS built on top of Ubuntu Server
+Astrometrics is an Astrophotography oriented Linux build based off Ubuntu Server
