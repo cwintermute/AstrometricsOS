@@ -1,0 +1,18 @@
+[Unit]
+Description=Remote desktop service (VNC) for :0 display
+#After=lightdm.service
+Requires=display-manager.service
+After=display-manager.service
+#After=lightdm.service
+
+[Service]
+Type=forking
+#ExecStartPre=/usr/bin/bash -c "/usr/bin/systemctl set-environment XAUTHORITY=$(find /var/run/lightdm/ -type f)"
+Environment=XAUTHORITY=/var/run/lightdm/root/:0
+Environment=HOME=/root
+ExecStart=x0vncserver -display :0 -SecurityTypes None -localhost 0 --I-KNOW-THIS-IS-INSECURE
+Restart=on-failure
+RestartSec=500ms
+
+[Install]
+WantedBy=multi-user.target
