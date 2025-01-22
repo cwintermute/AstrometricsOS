@@ -1,0 +1,13 @@
+[Unit]
+Description=super simple indi-web service
+Wants=network-online.target
+After=network.target network-online.target
+
+[Service]
+EnvironmentFile=-/etc/default/indi-web
+WorkingDirectory=/root/indi-web/
+ExecStart=/root/indi-web/venv/bin/python3 /root/indi-web/venv/bin/indi-web --xmldir $XMLDIR
+[Install]
+WantedBy=multi-user.target
+
+
