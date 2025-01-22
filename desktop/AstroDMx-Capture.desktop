@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AstroDMx Capture
+Comment=AstroDMx Capture for Linux
+Exec=/opt/AstroDMx-Capture/bin/AstroDMx-Capture
+Icon=/usr/share/astrodmx_capture/astrodmx.png
+Path=
+Terminal=false
+StartupNotify=true

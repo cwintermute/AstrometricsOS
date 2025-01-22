@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=KStars
+Comment=Desktop Planetarium
+Exec=kstars %U
+Icon=kstars
+Path=
+Terminal=false
+StartupNotify=false
