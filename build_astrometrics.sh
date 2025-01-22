@@ -140,7 +140,7 @@ fi
 if [ ! -z "$BLEEDING" ]; then
     # Install the needed packages for compiling libgphoto2
     printf "Installing libgphoto2 and gphoto2 from source. Ahead be dragons."
-    apt-get install libjpeg-dev libxml2-dev libcurl4-gnutls-dev libgd-dev libexif-dev libusb-dev libpopt-dev
+    apt-get install libjpeg-dev libxml2-dev libcurl4-gnutls-dev libgd-dev libexif-dev libusb-dev libpopt-dev -y
     mkdir /root/src/
     git clone https://github.com/gphoto/libgphoto2.git /root/src/libgphoto2
     cd /root/src/libgphoto2/
@@ -158,10 +158,71 @@ if [ ! -z "$BLEEDING" ]; then
     make
     make install
 
+    printf "Installing needed libs and packages for INDI compilation\n"
+    apt-get install libfftw3-dev libev-dev cdbs cmake git libcfitsio-dev \
+        libnova-dev libusb-1.0-0-dev libjpeg-dev libusb-dev libftdi-dev fxload \
+        libkrb5-dev libcurl4-gnutls-dev libraw-dev libgsl0-dev dkms libboost-regex-dev \
+        libgps-dev libxisf-dev libtheora0 librtlsdr-dev libgtest-dev libgmock-dev -y #libgphoto2-dev
+   #apt-get install libgphoto2-6t64 libgphoto2-l10n libgphoto2-port12 libgphoto2-port12t64
+
+    printf "Compiling INDI\n"
+    git clone https://github.com/indilib/indi.git /root/src/indi
+    cd /root/src/indi/
+    mkdir -p build/indi
+    cd build/indi
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug /root/src/indi
+    make install
+
 else
-    printf "Installing libgphoto2 and gphoto2 from package"
+    printf "Installing libgphoto2 and gphoto2 from package\n"
+    apt-get install libgphoto2-6 gphoto2
+
+    printd "Installing the rest of libgphoto2 and gphoto2\n"
+    apt-get install libgphoto2-6 libgphoto2-6t64 libgphoto2-l10n libgphoto2-port12 libgphoto2-port12t64
+
+    printf "Installing INDI full server package"
+    apt-get install indi-full -y
 fi
 
+printf "Setup Virtual Environment for indi-web\n"
+mkdir -p /root/indi-web
+cd /root/indi-web
+apt-get install python3.12-venv -y
+python3 -m venv venv
+source venv/bin/activate
+pip3 install indiweb importlib-metadata
+cp /home/seven/.astrometrics/systemd/indi-web.service /etc/systemd/system/
+# Different install paths have different locations unfortunately
+if [ ! -z "$BLEEDING" ]; then
+    cp /home/seven/.astrometrics/defaults/indi-web.bleeding /etc/default/indi-web
+else
+    cp /home/seven/.astrometrics/defaults/indi-web.package /etc/default/indi-web
+fi
+systemctl daemon-reload
+systemctl enable indi-web
+
+printf "Installing PHD2\n"
+apt-get install build-essential subversion cmake pkg-config libwxgtk3.2-dev wx-common \
+    wx3.2-i18n libindi-dev libnova-dev zlib1g-dev libeigen3-dev libogmacam -y
+
+apt-get install phd2 -y
+
+cd /root
+wget "https://www.astrodmx-capture.org.uk/downloads/astrodmx/current/linux-x86_64/astrodmx-capture_2.10.1_amd64.deb"
+dpkg --install astrodmx-capture_2.10.1_amd64.deb
+
+printf "Copying Desktop icons\n"
+su -c "mkdir ~/Desktop/" seven
+cp /home/seven/.astrometrics/desktop/* /home/seven/Desktop/
+chmod +x /home/seven/Desktop/*.desktop
+chown seven:seven /home/seven/Desktop/*.desktop
+
+sudo -u seven -g seven /home/seven/.astrometrics/scripts/fix_desktop_icons.sh
+
+apt-get install gpsd-clients -y
+apt-get install firefox -y
+
+print "Script finished install base system.\n"
 exit;
 
 echo $LIBG
