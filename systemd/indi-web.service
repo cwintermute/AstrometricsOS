@@ -4,9 +4,11 @@ Wants=network-online.target
 After=network.target network-online.target
 
 [Service]
+User=seven
 EnvironmentFile=-/etc/default/indi-web
-WorkingDirectory=/root/indi-web/
-ExecStart=/root/indi-web/venv/bin/python3 /root/indi-web/venv/bin/indi-web --xmldir $XMLDIR
+WorkingDirectory=/home/seven/indi-web/
+ExecStart=/home/seven/indi-web/venv/bin/python3 /home/seven/indi-web/venv/bin/indi-web --xmldir $XMLDIR
+
 [Install]
 WantedBy=multi-user.target
 
