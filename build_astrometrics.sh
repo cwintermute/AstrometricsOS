@@ -25,7 +25,7 @@ DEBUG=false
 BLEEDING=false
 
 # Sort out the flags that have been passed
-while getopts -l "bleeding,debug,help,parallel:" -- "bdhj:" flag
+while getopts "bdhj:" flag
 do
     case "${flag}" in
         b) BLEEDING=true;;
@@ -58,7 +58,7 @@ printf "Script will use -j"$J" for any compilation\n" | tee -a /tmp/astrometrics
 
 
 # If we are in debug mode, just dump out data lol
-if [ "$DEBUG" = True ] 
+if [ "$DEBUG" = true ] 
 then
 
     ETHINT=`lshw -class network -short | grep en | awk '{print $2}'`
@@ -119,7 +119,7 @@ chmod 440 /etc/sudoers.d/allow_apt
 
 
 # Pull down the scripts, configs and such for building the OS
-su seven -c "git clone https://github.com/cwintermute/astrometrics.git /home/seven/.astrometrics" >> /tmp/astrometrics.log
+su seven -c "git clone https://github.com/cwintermute/AstrometricsOS.git /home/seven/.astrometrics" >> /tmp/astrometrics.log
 
 # Install the XFCE4 for GUI
 printf "Installing XFCE\n" | tee -a /tmp/astrometrics.log
@@ -155,10 +155,10 @@ then
 fi
 
 # Install libgphoto2 and gphoto2 either from src or package
-if [ ! -z "$BLEEDING" ]; 
+if [ "$BLEEDING" = true ]; 
 then
     # Install the needed packages for compiling libgphoto2
-    printf "Installing libgphoto2 and gphoto2 from source. Ahead be dragons." | tee -a /tmp/astrometrics.log
+    printf "Installing libgphoto2 and gphoto2 from source. Ahead be dragons.\n" | tee -a /tmp/astrometrics.log
     apt-get install libjpeg-dev libxml2-dev libcurl4-gnutls-dev libgd-dev libexif-dev libusb-dev libpopt-dev -y >> /tmp/astrometrics.log
     mkdir /root/src/
     git clone https://github.com/gphoto/libgphoto2.git /root/src/libgphoto2 >> /tmp/astrometrics.log
@@ -196,7 +196,7 @@ else
     printf "Installing libgphoto2 and gphoto2 from package\n" | tee -a /tmp/astrometrics.log
     apt-get install libgphoto2-6 gphoto2 -y >> /tmp/astrometrics.log
 
-    printd "Installing the rest of libgphoto2 and gphoto2\n" | tee -a /tmp/astrometrics.log
+    printf "Installing the rest of libgphoto2 and gphoto2\n" | tee -a /tmp/astrometrics.log
     apt-get install libgphoto2-6 libgphoto2-6t64 libgphoto2-l10n libgphoto2-port12 libgphoto2-port12t64 -y >> /tmp/astrometrics.log
 
     printf "Installing INDI full server package" | tee -a /tmp/astrometrics.log
@@ -205,11 +205,11 @@ fi
 
 printf "Setup Virtual Environment for indi-web\n" | tee -a /tmp/astrometrics.log
 apt-get install python3.12-venv -y >> /tmp/astrometrics.log
-su -c "/home/seven/.astrometrics/scripts/setup_venv.sh" seven >> /tmp/astrometrics.log
+su -c "/bin/bash /home/seven/.astrometrics/scripts/setup_venv.sh" seven >> /tmp/astrometrics.log
 
 cp /home/seven/.astrometrics/systemd/indi-web.service /etc/systemd/system/
 # Different install paths have different locations unfortunately
-if [ ! -z "$BLEEDING" ]; 
+if [ "$BLEEDING" = true ]; 
 then
     cp /home/seven/.astrometrics/defaults/indi-web.bleeding /etc/default/indi-web
 else
@@ -235,22 +235,44 @@ cp /home/seven/.astrometrics/desktop/* /home/seven/Desktop/
 chmod +x /home/seven/Desktop/*.desktop
 chown seven:seven /home/seven/Desktop/*.desktop
 
-su -c "/bin/bash /home/seven/.astrometrics/scripts/fix_desktop_icons.sh" seven #>> /tmp/astrometrics.log
-
 printf "Disabling screen blanking and power management\n" | tee -a /tmp/astrometrics.log
+su -c "mkdir -p /home/seven/.config/xfce4/xfconf/xfce-perchannel-xml/" seven
 cp /home/seven/.astrometrics/configs/xfce4-power-manager.xml  /home/seven/.config/xfce4/xfconf/xfce-perchannel-xml/
+cp /home/seven/.astrometrics/configs/xfce4-screensaver.xml  /home/seven/.config/xfce4/xfconf/xfce-perchannel-xml/
+cp /home/seven/.astrometrics/configs/xfce4-desktop.xml  /home/seven/.config/xfce4/xfconf/xfce-perchannel-xml/
 
 apt-get install gpsd-clients -y >> /tmp/astrometrics.log
 apt-get install firefox -y >> /tmp/astrometrics.log
 
 printf "Installing KStars\n" | tee -a /tmp/astrometrics.log
-if [ ! -z "$BLEEDING" ];
+if [ "$BLEEDING" = true ];
 then
     apt-get install kstars-bleeding -y >> /tmp/astrometrics.log
 else
     apt-get install kstars -y >> /tmp/astrometrics.log
 fi
 
+printf "Installing and configuring VNC Server\n"
+apt-get install tigervnc-scraping-server -y
+
+cp /home/seven/.astrometrics/systemd/x0vncserver.service /etc/systemd/system/
+systemctl daemon-reload >> /tmp/astrometrics.log
+systemctl enable x0vncserver.service >> /tmp/astrometrics.log
+
+# Tell bash to run the icon fixer once upon login
+su -c "mkdir -p /home/seven/.config/autostart/" seven
+su -c "cp /home/seven/.astrometrics/autostart/fix_icons.desktop /home/seven/.config/autostart/" seven
+chmod +x /home/seven/.astrometrics/scripts/fix_desktop_icons.sh
+f=/home/seven/.config/autostart/fix_icons.desktop
+su -c "chmod +x $f; dbus-launch gio set -t string $f metadata::xfce-exe-checksum \"$(sha256sum $f | awk '{print $1}')\"" seven
+
+# Netplan time
+cp /home/seven/.astrometrics/configs/90-*.yaml /etc/netplan/
+sed -i "s/ETHERNET/$ETH/g" /etc/netplan/90-ethernet.yaml
+#sed -i "s/WIFI/$WIFI/g" /etc/netplan/90-wifi.yaml
+sed -i "s/SSID/Astrometrics-`tr -dc A-Za-z0-9 </dev/urandom | head -c 4`/g" /etc/netplan/90-wifi.yaml
+
+apt-get clean >> /tmp/astrometrics.log
 
 printf "Script finished install base system.\n" | tee -a /tmp/astrometrics.log
 exit;
