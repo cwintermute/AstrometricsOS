@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Fix Icons
+Comment=Fixes desktop icon permission
+Exec=/home/seven/.astrometrics/scripts/fix_desktop_icons.sh
+OnlyShowIn=XFCE;
+StartupNotify=false
+Terminal=false
+Hidden=false
