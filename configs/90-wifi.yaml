@@ -1,0 +1,21 @@
+network:
+  version: 2
+  wifis:
+    HotSpot:
+      renderer: NetworkManager
+      match: {}
+      ipv6-address-generation: "stable-privacy"
+      access-points:
+        "SSID":
+          auth:
+            key-management: "psk"
+            password: "astrophotography"
+          mode: "ap"
+          networkmanager:
+            name: "HotSpot"
+            passthrough:
+              ipv6.method: "shared"
+              ipv6.ip6-privacy: "-1"
+              proxy._: ""
+      networkmanager:
+        name: "HotSpot"

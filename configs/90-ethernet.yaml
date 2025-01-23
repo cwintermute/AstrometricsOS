@@ -1,0 +1,16 @@
+network:
+  version: 2
+  ethernets:
+    Uplink:
+      renderer: NetworkManager
+      match:
+        name: "ETHERNET"
+      dhcp4: true
+      dhcp6: true
+      ipv6-address-generation: "stable-privacy"
+      wakeonlan: true
+      networkmanager:
+        name: "Primary Ethernet"
+        passthrough:
+          ipv6.ip6-privacy: "-1"
+          proxy._: ""
