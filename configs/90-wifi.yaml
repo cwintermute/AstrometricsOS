@@ -11,6 +11,8 @@ network:
             key-management: "psk"
             password: "astrophotography"
           mode: "ap"
+          band: "2.4GHz" # 5GHz alternative
+          channel: 6
           networkmanager:
             name: "HotSpot"
             passthrough:
