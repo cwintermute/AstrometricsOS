@@ -25,9 +25,10 @@ DEBUG=false
 BLEEDING=false
 
 # Sort out the flags that have been passed
-while getopts "bdhj:" flag
+while getopts "a:bdhj:" flag
 do
     case "${flag}" in
+        a) ADMXVER=${OPTARG};;
         b) BLEEDING=true;;
         d) DEBUG=true;;
         h) HELP=${OPTARG}
@@ -73,11 +74,13 @@ fi
 # Determine our architecture for later purposes
 ARCH=$(uname -m)
 printf "Detected architecture: "$ARCH"\n" | tee -a /tmp/astrometrics.log
-ETH=`lshw -class network -short 2>&1 | grep en | awk '{print $2}'`
-WIFI=`lshw -class network -short 2>&1 | grep wl | awk '{print $2}'`
+# Should match either eth0 or enpXsY style names
+#WIFI=`lshw -class network -short 2>&1 | grep "wl\|wifi" | awk '{print $2}'`
 
 #echo $ETH;
 #echo $WIFI;
+
+export DEBIAN_FRONTEND=noninteractive
 
 
 # Add the PPA repository for the INDI software
@@ -91,7 +94,7 @@ add-apt-repository ppa:pch/phd2 -y >> /tmp/astrometrics.log
 apt-get update >> /tmp/astrometrics.log
 
 # Install the initial set of utilities needed
-apt-get install git libtool autotools-dev gettext autopoint pkg-config autoconf automake build-essential -y >> /tmp/astrometrics.log
+apt-get install lshw git apt-utils libtool autotools-dev gettext autopoint pkg-config autoconf automake build-essential -y >> /tmp/astrometrics.log
 
 # Enable .local name resolution for this host
 # I needed both of these in my testing to get Windows to play nice
@@ -106,7 +109,7 @@ useradd -G sudo -s /bin/bash -m seven
 echo 'seven:space' | chpasswd
 
 # Add the user to appropriate groups
-usermod -aG uucp,sys,audio,input,lp,video,users seven >> /tmp/astrometrics.log
+usermod -aG uucp,sys,audio,input,lp,video,users,dialout seven >> /tmp/astrometrics.log
 
 # Allow members of the sudo group to run all apps with no password.
 #sed -i 's/%sudo[[:space:]]ALL=(ALL:ALL) ALL/%sudo   ALL=(ALL:ALL) NOPASSWD: ALL\n\nTEST/g' ~/sudoers
@@ -154,6 +157,12 @@ then
     cp /home/seven/.astrometrics/configs/99-intel-acceleration.conf /etc/X11/xorg.conf.d/
 fi
 
+if [ $ARCH = "aarch64" ]
+then
+    echo "Found a potential RPi, copying disable v3d config" | tee -a /tmp/astrometrics.log
+    cp /home/seven/.astrometrics/configs/99-v3d.conf /etc/X11/xorg.conf.d/
+fi
+
 # Install libgphoto2 and gphoto2 either from src or package
 if [ "$BLEEDING" = true ]; 
 then
@@ -192,6 +201,34 @@ then
     cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi >> /tmp/astrometrics.log
     make install >> /tmp/astrometrics.log
 
+    printf "Compiling INDI 3rd party\n" | tee -a /tmp/astrometrics.log
+    apt-get install libnova-dev libcfitsio-dev libusb-1.0-0-dev zlib1g-dev libgsl-dev build-essential cmake git libjpeg-dev libcurl4-gnutls-dev libtiff-dev libftdi-dev libgps-dev libraw-dev libdc1394-dev libgphoto2-dev libboost-dev libboost-regex-dev librtlsdr-dev liblimesuite-dev libftdi1-dev libgps-dev libavcodec-dev libavdevice-dev libzmq3-dev -y
+    git clone --depth=1 https://github.com/indilib/indi-3rdparty /root/src/indi-3rdparty >> /tmp/astrometrics.log
+    cd /root/src/indi-3rdparty
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DBUILD_LIBS=1 /root/src/indi-3rdparty >> /tmp/astrometrics.log
+    make -j $J
+    make install >> /tmp/astrometrics.log
+    make clean
+    cd /root/src/indi-3rdparty
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty >> /tmp/astrometrics.log
+    make -j $J
+    make install >> /tmp/astrometrics.log
+    make clean
+    cd /root/src/indi-3rdparty/indi-eqmod
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-eqmod >> /tmp/astrometrics.log
+    make -j $J
+    make install >> /tmp/astrometrics.log
+    make clean
+    cd /root/src/indi-3rdparty/indi-gphoto
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-gphoto >> /tmp/astrometrics.log
+    make -j $J
+    make install >> /tmp/astrometrics.log
+    make clean
+    cd /root/src/indi-3rdparty/indi-gpsd
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-gpsd >> /tmp/astrometrics.log
+    make -j $J
+    make install >> /tmp/astrometrics.log
+    make clean
 else
     printf "Installing libgphoto2 and gphoto2 from package\n" | tee -a /tmp/astrometrics.log
     apt-get install libgphoto2-6 gphoto2 -y >> /tmp/astrometrics.log
@@ -199,7 +236,7 @@ else
     printf "Installing the rest of libgphoto2 and gphoto2\n" | tee -a /tmp/astrometrics.log
     apt-get install libgphoto2-6 libgphoto2-6t64 libgphoto2-l10n libgphoto2-port12 libgphoto2-port12t64 -y >> /tmp/astrometrics.log
 
-    printf "Installing INDI full server package" | tee -a /tmp/astrometrics.log
+    printf "Installing INDI full server package\n" | tee -a /tmp/astrometrics.log
     apt-get install indi-full -y >> /tmp/astrometrics.log
 fi
 
@@ -226,9 +263,14 @@ apt-get install phd2 -y >> /tmp/astrometrics.log
 
 printf "Downloading and Installing AstroDMX\n" | tee -a /tmp/astrometrics.log
 cd /root
-wget "https://www.astrodmx-capture.org.uk/downloads/astrodmx/current/linux-x86_64/astrodmx-capture_2.10.1_amd64.deb" >> /tmp/astrometrics.log
-dpkg --install astrodmx-capture_2.10.1_amd64.deb >> /tmp/astrometrics.log
-
+if [ $ARCH = "x86_64" ] 
+then
+    wget "https://www.astrodmx-capture.org.uk/downloads/astrodmx/current/linux-x86_64/astrodmx-capture_${ADMXVER}_amd64.deb" -O astrodmx.deb >> /tmp/astrometrics.log
+elif [ $ARCH = "aarch64" ]
+then
+    wget "https://www.astrodmx-capture.org.uk/downloads/astrodmx/current/linux-arm/astrodmx-glibc-2.28_${ADMXVER}_arm64.deb" -O astrodmx.deb >> /tmp/astrometrics.log
+fi
+dpkg --install astrodmx.deb >> /tmp/astrometrics.log    
 printf "Copying Desktop icons\n" | tee -a /tmp/astrometrics.log
 su -c "mkdir ~/Desktop/" seven
 cp /home/seven/.astrometrics/desktop/* /home/seven/Desktop/
@@ -268,9 +310,27 @@ su -c "chmod +x $f; dbus-launch gio set -t string $f metadata::xfce-exe-checksum
 
 # Netplan time
 cp /home/seven/.astrometrics/configs/90-*.yaml /etc/netplan/
+# Fixes permissions to prevent a bunch of warnings
+chmod 600 /etc/netplan/90-*.yaml 
+ETH=`lshw -class network -short 2>&1 | grep "en\|eth" | awk '{print $2}'`
 sed -i "s/ETHERNET/$ETH/g" /etc/netplan/90-ethernet.yaml
 #sed -i "s/WIFI/$WIFI/g" /etc/netplan/90-wifi.yaml
 sed -i "s/SSID/Astrometrics-`tr -dc A-Za-z0-9 </dev/urandom | head -c 4`/g" /etc/netplan/90-wifi.yaml
+# Fix systemd-networkd from doubling up the DHCP
+sed -i "s/\[Network\]/\[Network\]\nDHCP=no/g" /etc/systemd/networkd.conf
+rm /etc/netplan/50-*.yaml
+netplan generate
+#netplan apply
+
+
+# NoVNC and  NGINX stuff
+apt-get -y install novnc python3-websockify nginx >> /tmp/astrometrics.log
+cp /home/seven/.astrometrics/systemd/novnc.service /etc/systemd/system/
+systemctl daemon-reload >> /tmp/astrometrics.log
+systemctl enable novnc.service >> /tmp/astrometrics.log
+cp /home/seven/.astrometrics/configs/astrometrics.local.conf /etc/nginx/sites-available/
+ln -s /etc/nginx/sites-available/astrometrics.local.conf /etc/nginx/sites-enabled/
+systemctl enable nginx
 
 apt-get clean >> /tmp/astrometrics.log
 
