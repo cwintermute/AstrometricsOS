@@ -1,0 +1,19 @@
+network:
+  version: 2
+  ethernets:
+    DirectEthernet:
+      renderer: NetworkManager
+      match:
+        name: "enxa0cec8be0bd0" # This is my testing USB LOL
+      addresses: [10.42.10.1/24]
+      dhcp6: true
+      ipv6-address-generation: "stable-privacy"
+      wakeonlan: true
+      networkmanager:
+        name: "DirectEthernet"
+        passthrough:
+          ethernet._: ""
+          ipv4.method: "shared"
+          ipv6.method: "shared"
+          ipv6.ip6-privacy: "-1"
+          proxy._: ""
