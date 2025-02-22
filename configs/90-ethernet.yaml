@@ -6,11 +6,12 @@ network:
       match:
         name: "ETHERNET"
       dhcp4: true
-      dhcp6: true
+      dhcp6: false
       ipv6-address-generation: "stable-privacy"
       wakeonlan: true
       networkmanager:
         name: "Primary Ethernet"
         passthrough:
+          ipv6.method: "disabled"
           ipv6.ip6-privacy: "-1"
           proxy._: ""
