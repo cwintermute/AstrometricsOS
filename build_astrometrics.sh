@@ -21,11 +21,14 @@ printf "Starting Build Process at `date`\n" | tee -a /tmp/astrometrics.log
 
 # Pre-define variables used in switches
 J=1
+Y=false
+T=false
+K=false
 DEBUG=false
 BLEEDING=false
 
 # Sort out the flags that have been passed
-while getopts "a:bdhj:" flag
+while getopts "a:bdhj:kty" flag
 do
     case "${flag}" in
         a) ADMXVER=${OPTARG};;
@@ -39,14 +42,31 @@ do
 
 -d: Do Debug stuff. For testing only.
 
--h: Display help for this script\n\n";
+-h: Display help for this script
 
+-j <#>: how many cores to use when compiling
+
+-t Download some 3rd party WiFi USB drivers
+
+-y ignore ./compile output and just builds binaries
+
+Example: bash build.sh -y -j 4 -t -b -a \"2.12.1\"\n\n"
 exit;
         ;;
         j) 
             J=${OPTARG}
             CMAKE_BUILD_PARALLEL_LEVEL=$J
         ;;
+        k) 
+            K=true
+        ;;        
+        t) 
+            T=true
+        ;;        
+        y) 
+            Y=true
+        ;;
+
         *)
             echo "Invalid option: $1" >&2
             exit 1
@@ -124,12 +144,20 @@ chmod 440 /etc/sudoers.d/allow_apt
 # Pull down the scripts, configs and such for building the OS
 su seven -c "git clone https://github.com/cwintermute/AstrometricsOS.git /home/seven/.astrometrics" >> /tmp/astrometrics.log
 
-# Install the XFCE4 for GUI
-printf "Installing XFCE\n" | tee -a /tmp/astrometrics.log
-apt-get install xubuntu-core -y >> /tmp/astrometrics.log
-
-# Setup auto login
-cp /home/seven/.astrometrics/configs/12-autologin.conf /etc/lightdm/lightdm.conf.d/
+if [ "$K" = false ]
+then
+    # Install the XFCE4 for GUI
+    printf "Installing XFCE\n" | tee -a /tmp/astrometrics.log
+    apt-get install xubuntu-core -y >> /tmp/astrometrics.log
+    
+    # Setup auto login
+    cp /home/seven/.astrometrics/configs/12-autologin.conf /etc/lightdm/lightdm.conf.d/
+else
+    # Install kubuntu
+    printf "Installing Kubuntu desktop environtment \n" | tee -a /tmp/astrometrics.log
+    apt-get install kubuntu-desktop -y
+    apt-get purge libreoffice-* -y 
+fi
 
 # Enable the gui at startup
 systemctl set-default graphical.target >> /tmp/astrometrics.log
@@ -163,72 +191,98 @@ then
     cp /home/seven/.astrometrics/configs/99-v3d.conf /etc/X11/xorg.conf.d/
 fi
 
+printf "EXIING BLAH BLAH\n"
+exit
 # Install libgphoto2 and gphoto2 either from src or package
 if [ "$BLEEDING" = true ]; 
 then
-    # Install the needed packages for compiling libgphoto2
-    printf "Installing libgphoto2 and gphoto2 from source. Ahead be dragons.\n" | tee -a /tmp/astrometrics.log
+
     apt-get install libjpeg-dev libxml2-dev libcurl4-gnutls-dev libgd-dev libexif-dev libusb-dev libpopt-dev -y >> /tmp/astrometrics.log
-    mkdir /root/src/
-    git clone https://github.com/gphoto/libgphoto2.git /root/src/libgphoto2 >> /tmp/astrometrics.log
-    cd /root/src/libgphoto2/
-    autoreconf --install --symlink >> /tmp/astrometrics.log
-    ./configure --prefix=/usr/local 
-    read -p "Hopefully this looks right. Press any key to continue" -n1 -s
-    make -j $J
-    make install >> /tmp/astrometrics.log
-    
-    git clone https://github.com/gphoto/gphoto2.git /root/src/gphoto2
-    cd /root/src/gphoto2/
-    autoreconf --install --symlink >> /tmp/astrometrics.log
-    ./configure --prefix=/usr/local
-    read -p "Hopefully this looks right. Press any key to continue" -n1 -s
-    make -j $J
-    make install >> /tmp/astrometrics.log
+    printf "Downloading custom libgphoto2 packages to support EOS R8\n" | tee -a /tmp/astrometrics.log    
+    cd /root/
+    if [ "$ARCH" = "x86_64" ] 
+    then
+        wget https://refraktor.org/debs/gphoto2_2.5.28.1-1_amd64.deb
+        wget https://refraktor.org/debs/libgphoto2_2.5.31.1-1_amd64.deb
+        dpkg -i libgphoto2_2.5.31.1-1_amd64.deb
+        dpkg -i gphoto2_2.5.28.1-1_amd64.deb
+        apt-get install indi-full -y
+    elif [ $ARCH = "aarch64" ]
+    then    
+        # Install the needed packages for compiling libgphoto2
+        printf "Installing libgphoto2 and gphoto2 from source. Ahead be dragons.\n" | tee -a /tmp/astrometrics.log
+        apt-get install libjpeg-dev libxml2-dev libcurl4-gnutls-dev libgd-dev libexif-dev libusb-dev libpopt-dev -y >> /tmp/astrometrics.log
+        mkdir /root/src/
+        git clone https://github.com/gphoto/libgphoto2.git /root/src/libgphoto2 >> /tmp/astrometrics.log
+        cd /root/src/libgphoto2/
+        autoreconf --install --symlink >> /tmp/astrometrics.log
+        ./configure --prefix=/usr/local 
+        if [ "$Y" != true ];
+        then
+            read -p "Hopefully this looks right. Press any key to continue" -n1 -s
+        fi
+        make -j $J
+        make install >> /tmp/astrometrics.log
+        
+        git clone https://github.com/gphoto/gphoto2.git /root/src/gphoto2 >> /tmp/astrometrics.log
+        cd /root/src/gphoto2/
+        autoreconf --install --symlink >> /tmp/astrometrics.log
+        ./configure --prefix=/usr/local
+        if [ "$Y" != true ];
+        then
+            read -p "Hopefully this looks right. Press any key to continue" -n1 -s
+        fi
+        make -j $J
+        make install >> /tmp/astrometrics.log
 
-    printf "Installing needed libs and packages for INDI compilation\n" | tee -a /tmp/astrometrics.log
-    apt-get install libfftw3-dev libev-dev cdbs cmake git libcfitsio-dev \
-        libnova-dev libusb-1.0-0-dev libjpeg-dev libusb-dev libftdi-dev fxload \
-        libkrb5-dev libcurl4-gnutls-dev libraw-dev libgsl0-dev dkms libboost-regex-dev \
-        libgps-dev libxisf-dev libtheora0 librtlsdr-dev libgtest-dev libgmock-dev -y >> /tmp/astrometrics.log #libgphoto2-dev
-   #apt-get install libgphoto2-6t64 libgphoto2-l10n libgphoto2-port12 libgphoto2-port12t64
+        printf "Installing needed libs and packages for INDI compilation\n" | tee -a /tmp/astrometrics.log
+        apt-get install libfftw3-dev libev-dev cdbs cmake git libcfitsio-dev \
+            libnova-dev libusb-1.0-0-dev libjpeg-dev libusb-dev libftdi-dev fxload \
+            libkrb5-dev libcurl4-gnutls-dev libraw-dev libgsl0-dev dkms libboost-regex-dev \
+            libgps-dev libxisf-dev libtheora0 librtlsdr-dev libgtest-dev libgmock-dev -y >> /tmp/astrometrics.log #libgphoto2-dev
+        #apt-get install libgphoto2-6t64 libgphoto2-l10n libgphoto2-port12 libgphoto2-port12t64
 
-    printf "Compiling INDI\n" | tee -a /tmp/astrometrics.log
-    git clone https://github.com/indilib/indi.git /root/src/indi >> /tmp/astrometrics.log
-    cd /root/src/indi/
-    mkdir -p build/indi
-    cd build/indi
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi >> /tmp/astrometrics.log
-    make install >> /tmp/astrometrics.log
+        printf "Compiling INDI\n" | tee -a /tmp/astrometrics.log
+        git clone https://github.com/indilib/indi.git /root/src/indi >> /tmp/astrometrics.log
+        cd /root/src/indi/
+        mkdir -p build/indi
+        cd build/indi
+        cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi >> /tmp/astrometrics.log
+        make install >> /tmp/astrometrics.log
 
-    printf "Compiling INDI 3rd party\n" | tee -a /tmp/astrometrics.log
-    apt-get install libnova-dev libcfitsio-dev libusb-1.0-0-dev zlib1g-dev libgsl-dev build-essential cmake git libjpeg-dev libcurl4-gnutls-dev libtiff-dev libftdi-dev libgps-dev libraw-dev libdc1394-dev libgphoto2-dev libboost-dev libboost-regex-dev librtlsdr-dev liblimesuite-dev libftdi1-dev libgps-dev libavcodec-dev libavdevice-dev libzmq3-dev -y
-    git clone --depth=1 https://github.com/indilib/indi-3rdparty /root/src/indi-3rdparty >> /tmp/astrometrics.log
-    cd /root/src/indi-3rdparty
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DBUILD_LIBS=1 /root/src/indi-3rdparty >> /tmp/astrometrics.log
-    make -j $J
-    make install >> /tmp/astrometrics.log
-    make clean
-    cd /root/src/indi-3rdparty
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty >> /tmp/astrometrics.log
-    make -j $J
-    make install >> /tmp/astrometrics.log
-    make clean
-    cd /root/src/indi-3rdparty/indi-eqmod
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-eqmod >> /tmp/astrometrics.log
-    make -j $J
-    make install >> /tmp/astrometrics.log
-    make clean
-    cd /root/src/indi-3rdparty/indi-gphoto
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-gphoto >> /tmp/astrometrics.log
-    make -j $J
-    make install >> /tmp/astrometrics.log
-    make clean
-    cd /root/src/indi-3rdparty/indi-gpsd
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-gpsd >> /tmp/astrometrics.log
-    make -j $J
-    make install >> /tmp/astrometrics.log
-    make clean
+        printf "Compiling INDI 3rd party\n" | tee -a /tmp/astrometrics.log
+        apt-get install libnova-dev libcfitsio-dev libusb-1.0-0-dev zlib1g-dev libgsl-dev build-essential cmake git libjpeg-dev libcurl4-gnutls-dev libtiff-dev libftdi-dev libgps-dev libraw-dev libdc1394-dev libgphoto2-dev libboost-dev libboost-regex-dev librtlsdr-dev liblimesuite-dev libftdi1-dev libgps-dev libavcodec-dev libavdevice-dev libzmq3-dev -y
+        git clone --depth=1 https://github.com/indilib/indi-3rdparty /root/src/indi-3rdparty >> /tmp/astrometrics.log
+        cd /root/src/indi-3rdparty
+        cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug -DBUILD_LIBS=1 /root/src/indi-3rdparty >> /tmp/astrometrics.log
+        make -j $J
+        make install >> /tmp/astrometrics.log
+        make clean
+        cd /root/src/indi-3rdparty
+        cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty >> /tmp/astrometrics.log
+        make -j $J
+        make install >> /tmp/astrometrics.log
+        make clean
+        cd /root/src/indi-3rdparty/indi-eqmod
+        cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-eqmod >> /tmp/astrometrics.log
+        make -j $J
+        make install >> /tmp/astrometrics.log
+        make clean
+        cd /root/src/indi-3rdparty/indi-gphoto
+        cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-gphoto >> /tmp/astrometrics.log
+        make -j $J
+        make install >> /tmp/astrometrics.log
+        make clean
+        cd /root/src/indi-3rdparty/indi-gpsd
+        cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Debug  /root/src/indi-3rdparty/indi-gpsd >> /tmp/astrometrics.log
+        make -j $J
+        make install >> /tmp/astrometrics.log
+        make clean
+        #wget https://refraktor.org/debs/gphoto2_2.5.28.1-20250222_arm64.deb
+        #wget https://refraktor.org/debs/libgphoto2_2.5.31.1-20250222_arm64.deb
+        #dpkg -i libgphoto2_2.5.31.1-20250222_arm64.deb
+        #dpkg -i gphoto2_2.5.28.1-20250222_arm64.deb
+    fi
 else
     printf "Installing libgphoto2 and gphoto2 from package\n" | tee -a /tmp/astrometrics.log
     apt-get install libgphoto2-6 gphoto2 -y >> /tmp/astrometrics.log
@@ -246,12 +300,12 @@ su -c "/bin/bash /home/seven/.astrometrics/scripts/setup_venv.sh" seven >> /tmp/
 
 cp /home/seven/.astrometrics/systemd/indi-web.service /etc/systemd/system/
 # Different install paths have different locations unfortunately
-if [ "$BLEEDING" = true ]; 
-then
-    cp /home/seven/.astrometrics/defaults/indi-web.bleeding /etc/default/indi-web
-else
-    cp /home/seven/.astrometrics/defaults/indi-web.package /etc/default/indi-web
-fi
+#if [ "$BLEEDING" = true ]; 
+#then
+#    cp /home/seven/.astrometrics/defaults/indi-web.bleeding /etc/default/indi-web
+#else
+cp /home/seven/.astrometrics/defaults/indi-web.package /etc/default/indi-web
+#fi
 systemctl daemon-reload >> /tmp/astrometrics.log
 systemctl enable indi-web >> /tmp/astrometrics.log
 
@@ -265,7 +319,9 @@ printf "Downloading and Installing AstroDMX\n" | tee -a /tmp/astrometrics.log
 cd /root
 if [ $ARCH = "x86_64" ] 
 then
-    wget "https://www.astrodmx-capture.org.uk/downloads/astrodmx/current/linux-x86_64/astrodmx-capture_${ADMXVER}_amd64.deb" -O astrodmx.deb >> /tmp/astrometrics.log
+    wget http://refraktor.org/astrodmx.deb >> /tmp/astrometrics.log
+    # Fix later...
+    #wget "https://www.astrodmx-capture.org.uk/downloads/astrodmx/current/linux-x86_64/astrodmx-capture_${ADMXVER}_amd64.deb" -O astrodmx.deb >> /tmp/astrometrics.log
 elif [ $ARCH = "aarch64" ]
 then
     wget "https://www.astrodmx-capture.org.uk/downloads/astrodmx/current/linux-arm/astrodmx-glibc-2.28_${ADMXVER}_arm64.deb" -O astrodmx.deb >> /tmp/astrometrics.log
@@ -283,15 +339,22 @@ cp /home/seven/.astrometrics/configs/xfce4-power-manager.xml  /home/seven/.confi
 cp /home/seven/.astrometrics/configs/xfce4-screensaver.xml  /home/seven/.config/xfce4/xfconf/xfce-perchannel-xml/
 cp /home/seven/.astrometrics/configs/xfce4-desktop.xml  /home/seven/.config/xfce4/xfconf/xfce-perchannel-xml/
 
+# Foudn at https://unsplash.com/photos/silhouette-of-trees-under-starry-night-wI1Vfy7t184
+printf "Making wallpaper pretty lololol\n"
+su -c "mkdir /home/seven/Pictures" seven
+cd /home/seven/Pictures/
+wget "https://unsplash.com/photos/wI1Vfy7t184/download?ixid=M3wxMjA3fDB8MXxhbGx8fHx8fHx8fHwxNzM5OTA1OTY5fA&force=true" -O silhouette-of-trees-under-starry-night-wI1Vfy7t184.jpg
+chown seven:seven silhouette-of-trees-under-starry-night-wI1Vfy7t184.jpg
+
 apt-get install gpsd-clients -y >> /tmp/astrometrics.log
 apt-get install firefox -y >> /tmp/astrometrics.log
 
 printf "Installing KStars\n" | tee -a /tmp/astrometrics.log
 if [ "$BLEEDING" = true ];
 then
-    apt-get install kstars-bleeding -y >> /tmp/astrometrics.log
+    apt-get install --no-install-recommends kstars-bleeding -y >> /tmp/astrometrics.log
 else
-    apt-get install kstars -y >> /tmp/astrometrics.log
+    apt-get install --no-install-recommends kstars -y >> /tmp/astrometrics.log
 fi
 
 printf "Installing and configuring VNC Server\n"
@@ -302,20 +365,31 @@ systemctl daemon-reload >> /tmp/astrometrics.log
 systemctl enable x0vncserver.service >> /tmp/astrometrics.log
 
 # Tell bash to run the icon fixer once upon login
-su -c "mkdir -p /home/seven/.config/autostart/" seven
-su -c "cp /home/seven/.astrometrics/autostart/fix_icons.desktop /home/seven/.config/autostart/" seven
-chmod +x /home/seven/.astrometrics/scripts/fix_desktop_icons.sh
-f=/home/seven/.config/autostart/fix_icons.desktop
-su -c "chmod +x $f; dbus-launch gio set -t string $f metadata::xfce-exe-checksum \"$(sha256sum $f | awk '{print $1}')\"" seven
+if [ "$K" = false ]
+then
+    apt-get install dbus-x11 >> /tmp/astrometrics.log
+    su -c "mkdir -p /home/seven/.config/autostart/" seven
+    su -c "cp /home/seven/.astrometrics/autostart/fix_icons.desktop /home/seven/.config/autostart/" seven
+    chmod +x /home/seven/.astrometrics/scripts/fix_desktop_icons.sh
+    f=/home/seven/.config/autostart/fix_icons.desktop
+    su -c "chmod +x $f; dbus-launch gio set -t string $f metadata::xfce-exe-checksum \"$(sha256sum $f | awk '{print $1}')\"" seven
+fi
 
 # Netplan time
 cp /home/seven/.astrometrics/configs/90-*.yaml /etc/netplan/
 # Fixes permissions to prevent a bunch of warnings
 chmod 600 /etc/netplan/90-*.yaml 
-ETH=`lshw -class network -short 2>&1 | grep "en\|eth" | awk '{print $2}'`
+# Matches first ethernet device for uplink
+ETH=`lshw -class network -short 2>&1 | grep "en\|eth" | awk '{print $2}' | tr " " "\n" | head -n 1`
 sed -i "s/ETHERNET/$ETH/g" /etc/netplan/90-ethernet.yaml
 #sed -i "s/WIFI/$WIFI/g" /etc/netplan/90-wifi.yaml
-sed -i "s/SSID/Astrometrics-`tr -dc A-Za-z0-9 </dev/urandom | head -c 4`/g" /etc/netplan/90-wifi.yaml
+if [ "$U" = true ]
+then
+    SSID="Astrometrics-`tr -dc A-Za-z0-9 </dev/urandom | head -c 4`"
+else
+    SSID="Astrometrics"
+fi
+sed -i "s/SSID/${SSID}/g" /etc/netplan/90-wifi.yaml
 # Fix systemd-networkd from doubling up the DHCP
 sed -i "s/\[Network\]/\[Network\]\nDHCP=no/g" /etc/systemd/networkd.conf
 rm /etc/netplan/50-*.yaml
@@ -332,9 +406,44 @@ cp /home/seven/.astrometrics/configs/astrometrics.local.conf /etc/nginx/sites-av
 ln -s /etc/nginx/sites-available/astrometrics.local.conf /etc/nginx/sites-enabled/
 systemctl enable nginx
 
+systemctl disable systemd-networkd-wait-online.service >> /tmp/astrometrics.log
+
+apt-get install bluez-firmware -y >> /tmp/astrometrics.log
+
 apt-get clean >> /tmp/astrometrics.log
 
+# Install extra wifi adapter driver for local use
+if [ "$T" = true ]
+then
+    if [ "$ARCH" = "aarch64" ]
+    then
+        # Needed for first driver
+        apt-get install linux-headers-$(uname -r)
+    fi
+        mkdir -p /root/src
+        # Single antenna USB adapter    
+        printf "Installing a third party driver for my test wifi USB adapters lol\n" | tee -a /tmp/astrometrics.log
+        cd /root/src/
+        wget https://github.com/morrownr/8821au-20210708/archive/refs/heads/main.zip
+        unzip main.zip
+        cd /root/src/8821au-20210708-main/
+        (echo n; echo n) | sh install-driver.sh
+
+
+        # Dual Antenna adapter
+        echo "blacklist rtw88_8822bu" > /etc/modprobe.d/rtw8822bu.conf
+        git clone https://github.com/RinCat/RTL88x2BU-Linux-Driver /root/src/RTL88x2BU-Linux-Driver
+        cd /root/src/RTL88x2BU-Linux-Driver
+        make -j "$J"
+        make install
+fi
+
+apt-get update > /tmp/astrometrics.log
+apt-get upgrade -y > /tmp/astrometrics.log
+
+
 printf "Script finished install base system.\n" | tee -a /tmp/astrometrics.log
+printf "Please reboot to see changes.\n"
 exit;
 
 echo $LIBG
